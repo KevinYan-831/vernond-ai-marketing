@@ -37,4 +37,6 @@ core
 .env
 .env.local
 .env.*.local
+.vscode
+
 
