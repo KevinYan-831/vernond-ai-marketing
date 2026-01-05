@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #0A0A0F;
+            color: #fff;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            background: #000;
+            border: 2px solid #D4AF37;
+            border-radius: 8px;
+        }
+        button {
+            margin: 10px 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #D4AF37;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #1A1A1F;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎥 Camera & Recording Test</h1>
+
+    <div class="status" id="status">Status: Initializing...</div>
+
+    <video id="video" autoplay playsinline muted></video>
+
+    <div>
+        <button id="startBtn" disabled>Start Recording</button>
+        <button id="stopBtn" disabled>Stop Recording</button>
+        <button id="playbackBtn" disabled>Play Recording</button>
+    </div>
+
+    <video id="playback" controls style="display:none;"></video>
+
+    <script>
+        const video = document.getElementById('video');
+        const playback = document.getElementById('playback');
+        const status = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const playbackBtn = document.getElementById('playbackBtn');
+
+        let mediaRecorder;
+        let recordedChunks = [];
+        let stream;
+
+        function log(message) {
+            console.log(message);
+            status.innerHTML = `Status: ${message}`;
+        }
+
+        // Initialize camera
+        async function initCamera() {
+            try {
+                log('Requesting camera access...');
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+
+                video.srcObject = stream;
+                await video.play();
+
+                log('✅ Camera ready! Click "Start Recording" to begin.');
+                startBtn.disabled = false;
+
+                // Check codec support
+                const codecs = [
+                    'video/webm;codecs=vp9',
+                    'video/webm;codecs=vp8',
+                    'video/webm',
+                    'video/mp4'
+                ];
+
+                console.log('Codec support:');
+                codecs.forEach(codec => {
+                    console.log(`  ${codec}: ${MediaRecorder.isTypeSupported(codec)}`);
+                });
+
+            } catch (err) {
+                log(`❌ Camera error: ${err.message}`);
+                console.error('Camera error:', err);
+            }
+        }
+
+        // Start recording
+        startBtn.onclick = () => {
+            recordedChunks = [];
+
+            try {
+                let options = {};
+                if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+                    options = { mimeType: 'video/webm;codecs=vp9' };
+                } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                    options = { mimeType: 'video/webm;codecs=vp8' };
+                } else if (MediaRecorder.isTypeSupported('video/webm')) {
+                    options = { mimeType: 'video/webm' };
+                }
+
+                mediaRecorder = new MediaRecorder(stream, options);
+                log(`🔴 Recording started with ${options.mimeType || 'default codec'}...`);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                        console.log(`Chunk received: ${event.data.size} bytes`);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: options.mimeType || 'video/webm' });
+                    log(`✅ Recording stopped! Size: ${(blob.size / 1024).toFixed(2)} KB`);
+
+                    const url = URL.createObjectURL(blob);
+                    playback.src = url;
+                    playback.style.display = 'block';
+                    playbackBtn.disabled = false;
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                };
+
+                mediaRecorder.onerror = (event) => {
+                    log(`❌ Recording error: ${event}`);
+                    console.error('Recording error:', event);
+                };
+
+                mediaRecorder.start(100);
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+
+            } catch (err) {
+                log(`❌ Failed to start recording: ${err.message}`);
+                console.error('Recording error:', err);
+            }
+        };
+
+        // Stop recording
+        stopBtn.onclick = () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                log('⏹️ Stopping recording...');
+            }
+        };
+
+        // Play recording
+        playbackBtn.onclick = () => {
+            playback.play();
+        };
+
+        // Initialize on load
+        initCamera();
+    </script>
+</body>
+</html>
