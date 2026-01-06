@@ -227,6 +227,53 @@ export default function MagicAnalyzer() {
     chunksRef.current = [];
   }, []);
 
+  const handleFileSelect = useCallback((file: File) => {
+    console.log("File selected:", file.name, file.size, file.type);
+
+    // Reset previous state if there was a previous analysis
+    if (verdict !== null) {
+      setVerdict(null);
+      setTimestamps([]);
+      setAnalysisText("");
+      setAnalysisProgress(0);
+      setUploadProgress(0);
+    }
+
+    // Validate file type
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/avi'];
+    if (!allowedTypes.some(type => file.type.startsWith(type.split('/')[0] + '/'))) {
+      alert(language === 'zh'
+        ? '无效的视频格式。请上传 MP4、WebM、MOV 或 AVI 文件。'
+        : 'Invalid video format. Please upload MP4, WebM, MOV, or AVI files.');
+      return;
+    }
+
+    // Check file size (max 100MB)
+    const maxSize = 100 * 1024 * 1024; // 100MB in bytes
+    if (file.size > maxSize) {
+      alert(language === 'zh'
+        ? '文件太大。最大文件大小为 100MB。'
+        : 'File too large. Maximum file size is 100MB.');
+      return;
+    }
+
+    // Check minimum file size (at least 100KB)
+    const minSize = 100 * 1024; // 100KB
+    if (file.size < minSize) {
+      alert(language === 'zh'
+        ? '文件太小。请上传至少 100KB 的视频。'
+        : 'File too small. Please upload a video at least 100KB in size.');
+      return;
+    }
+
+    // Convert File to Blob and process
+    const blob = new Blob([file], { type: file.type });
+    setVideoBlob(blob);
+
+    // Immediately start upload and analysis
+    uploadAndAnalyze(blob);
+  }, [language, uploadAndAnalyze, verdict]);
+
   return (
     <div className="min-h-screen bg-magic-charcoal overflow-hidden relative">
       {/* Background effects */}
@@ -324,6 +371,7 @@ export default function MagicAnalyzer() {
               isUploading={appState === "uploading" || appState === "analyzing"}
               onStart={startCountdown}
               onStop={stopRecording}
+              onFileSelect={handleFileSelect}
               countdown={countdown}
             />
           </motion.div>
