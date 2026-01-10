@@ -1,24 +1,51 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
+import { Eye, Scan, Brain, Sparkles } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AnalysisOverlayProps {
   isAnalyzing: boolean;
   progress: number;
 }
 
-const analysisMessages = [
-  "Analyzing hand movements...",
-  "Detecting misdirection patterns...",
-  "Scanning for hidden objects...",
-  "Tracking finger positions...",
-  "Analyzing timing sequences...",
-  "Cross-referencing 10,000+ trick databases...",
-  "Computing sleight probability...",
-  "Final verification in progress...",
-];
+const analysisMessages = {
+  en: [
+    { text: "Analyzing hand movements...", icon: "scan" },
+    { text: "Detecting misdirection patterns...", icon: "eye" },
+    { text: "Scanning for hidden objects...", icon: "scan" },
+    { text: "Tracking finger positions...", icon: "eye" },
+    { text: "Analyzing timing sequences...", icon: "brain" },
+    { text: "Cross-referencing 10,000+ trick databases...", icon: "brain" },
+    { text: "Computing sleight probability...", icon: "sparkles" },
+    { text: "Final verification in progress...", icon: "sparkles" },
+  ],
+  zh: [
+    { text: "正在分析手部动作...", icon: "scan" },
+    { text: "检测误导技巧...", icon: "eye" },
+    { text: "扫描隐藏物品...", icon: "scan" },
+    { text: "追踪手指位置...", icon: "eye" },
+    { text: "分析时机控制...", icon: "brain" },
+    { text: "对比 10,000+ 魔术技巧数据库...", icon: "brain" },
+    { text: "计算手法概率...", icon: "sparkles" },
+    { text: "最终验证中...", icon: "sparkles" },
+  ],
+};
+
+const IconComponent = ({ type }: { type: string }) => {
+  const props = { className: "w-4 h-4 text-magic-gold mr-2" };
+  switch (type) {
+    case "eye": return <Eye {...props} />;
+    case "scan": return <Scan {...props} />;
+    case "brain": return <Brain {...props} />;
+    case "sparkles": return <Sparkles {...props} />;
+    default: return <Scan {...props} />;
+  }
+};
 
 export default function AnalysisOverlay({ isAnalyzing, progress }: AnalysisOverlayProps) {
+  const { language } = useLanguage();
   const [currentMessage, setCurrentMessage] = useState(0);
+  const messages = analysisMessages[language];
 
   useEffect(() => {
     if (!isAnalyzing) {
@@ -27,11 +54,11 @@ export default function AnalysisOverlay({ isAnalyzing, progress }: AnalysisOverl
     }
 
     const interval = setInterval(() => {
-      setCurrentMessage(prev => (prev + 1) % analysisMessages.length);
+      setCurrentMessage(prev => (prev + 1) % messages.length);
     }, 1500);
 
     return () => clearInterval(interval);
-  }, [isAnalyzing]);
+  }, [isAnalyzing, messages.length]);
 
   return (
     <AnimatePresence>
@@ -102,16 +129,17 @@ export default function AnalysisOverlay({ isAnalyzing, progress }: AnalysisOverl
             
             {/* Status message */}
             <AnimatePresence mode="wait">
-              <motion.p
+              <motion.div
                 key={currentMessage}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.3 }}
-                className="font-body text-magic-gold text-sm tracking-wide"
+                className="flex items-center justify-center font-body text-magic-gold text-sm tracking-wide"
               >
-                {analysisMessages[currentMessage]}
-              </motion.p>
+                <IconComponent type={messages[currentMessage].icon} />
+                <span>{messages[currentMessage].text}</span>
+              </motion.div>
             </AnimatePresence>
             
             {/* Progress bar */}

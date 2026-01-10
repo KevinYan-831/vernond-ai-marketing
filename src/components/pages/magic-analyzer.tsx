@@ -10,6 +10,7 @@ import BackgroundEffects from "@/components/magic/BackgroundEffects";
 import LanguageSwitcher from "@/components/magic/LanguageSwitcher";
 import { supabase } from "../../../supabase/supabase";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { soundEffects } from "@/utils/sounds";
 
 type AppState = "idle" | "countdown" | "recording" | "uploading" | "analyzing";
 
@@ -23,6 +24,8 @@ export default function MagicAnalyzer() {
   const [timestamps, setTimestamps] = useState<string[]>([]);
   const [analysisText, setAnalysisText] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -30,6 +33,8 @@ export default function MagicAnalyzer() {
 
   const handleStreamReady = useCallback((stream: MediaStream) => {
     streamRef.current = stream;
+    setIsCameraReady(true);
+    setIsResetting(false);
   }, []);
 
   const startRecording = useCallback(() => {
@@ -118,10 +123,12 @@ export default function MagicAnalyzer() {
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
+      // Play shutter sound for stopping recording
+      soundEffects.playShutter();
     }
   }, []);
 
-  const uploadAndAnalyze = async (blob: Blob) => {
+  const uploadAndAnalyze = useCallback(async (blob: Blob) => {
     console.log("Starting upload and analysis...");
     setAppState("uploading");
     setUploadProgress(0);
@@ -185,31 +192,30 @@ export default function MagicAnalyzer() {
 
       if (error) {
         console.error("Analysis error:", error);
-        // On error, show a random result for demo purposes
-        const randomVerdict = Math.random() > 0.4 ? "caught" : "fooled";
-        setVerdict(randomVerdict);
-        setAnalysisText(language === 'zh'
-          ? '分析过程中出现错误，显示随机结果。'
-          : 'Error during analysis, showing random result.');
-        if (randomVerdict === "caught") {
-          setTimestamps(["0:02.34", "0:05.67"]);
-        }
-      } else {
-        setVerdict(data.verdict);
-        setTimestamps(data.timestamps || []);
-        setAnalysisText(data.analysis || "");
+        // Show error to user - reset to idle state
+        setAppState("idle");
+        const errorDetails = data?.details || error.message || '';
+        alert(language === 'zh'
+          ? `分析失败：${errorDetails}`
+          : `Analysis failed: ${errorDetails}`);
+        return;
       }
+
+      // Successfully received AI analysis
+      setVerdict(data.verdict);
+      setTimestamps(data.timestamps || []);
+      setAnalysisText(data.analysis || "");
 
     } catch (err) {
       console.error("Upload/Analysis failed:", err);
-      // Fallback to random result
-      setVerdict(Math.random() > 0.5 ? "caught" : "fooled");
-      setTimestamps(["0:03.21"]);
-      setAnalysisText(language === 'zh'
-        ? '上传失败，显示随机结果。'
-        : 'Upload failed, showing random result.');
+      // Show error to user - reset to idle state
+      setAppState("idle");
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      alert(language === 'zh'
+        ? `上传或分析失败：${errorMessage}`
+        : `Upload or analysis failed: ${errorMessage}`);
     }
-  };
+  }, [language]);
 
   const handleRetry = useCallback(() => {
     // Stop any existing recording
@@ -217,6 +223,11 @@ export default function MagicAnalyzer() {
       mediaRecorderRef.current.stop();
     }
 
+    // Mark as resetting - this disables controls while camera reinitializes
+    setIsResetting(true);
+    setIsCameraReady(false);
+
+    // Reset all state
     setAppState("idle");
     setVideoBlob(null);
     setVerdict(null);
@@ -225,19 +236,21 @@ export default function MagicAnalyzer() {
     setAnalysisProgress(0);
     setUploadProgress(0);
     chunksRef.current = [];
+
+    // Clear the stream ref - camera will reinit via VideoStage
+    streamRef.current = null;
   }, []);
 
   const handleFileSelect = useCallback((file: File) => {
     console.log("File selected:", file.name, file.size, file.type);
 
-    // Reset previous state if there was a previous analysis
-    if (verdict !== null) {
-      setVerdict(null);
-      setTimestamps([]);
-      setAnalysisText("");
-      setAnalysisProgress(0);
-      setUploadProgress(0);
-    }
+    // Always reset state for new upload
+    setVerdict(null);
+    setTimestamps([]);
+    setAnalysisText("");
+    setAnalysisProgress(0);
+    setUploadProgress(0);
+    setAppState("idle");
 
     // Validate file type
     const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/avi'];
@@ -272,7 +285,7 @@ export default function MagicAnalyzer() {
 
     // Immediately start upload and analysis
     uploadAndAnalyze(blob);
-  }, [language, uploadAndAnalyze, verdict]);
+  }, [language, uploadAndAnalyze]);
 
   return (
     <div className="min-h-screen bg-magic-charcoal overflow-hidden relative">
@@ -322,6 +335,7 @@ export default function MagicAnalyzer() {
               isRecording={appState === "recording"}
               videoBlob={videoBlob}
               onStreamReady={handleStreamReady}
+              shouldReinitialize={isResetting}
             />
             
             {/* Analysis overlay on the video */}
@@ -346,7 +360,7 @@ export default function MagicAnalyzer() {
                       className="w-16 h-16 mx-auto mb-4 border-4 border-magic-gold/30 border-t-magic-gold rounded-full"
                     />
                     <p className="font-body text-magic-gold text-sm">
-                      Uploading video...
+                      {language === 'zh' ? '正在上传视频...' : 'Uploading video...'}
                     </p>
                     <div className="mt-3 w-32 mx-auto h-1 bg-magic-charcoal rounded-full overflow-hidden">
                       <motion.div
@@ -369,6 +383,7 @@ export default function MagicAnalyzer() {
             <RecordingControls
               isRecording={appState === "recording"}
               isUploading={appState === "uploading" || appState === "analyzing"}
+              isCameraReady={isCameraReady}
               onStart={startCountdown}
               onStop={stopRecording}
               onFileSelect={handleFileSelect}
@@ -384,7 +399,9 @@ export default function MagicAnalyzer() {
             className="mt-8 text-center max-w-md"
           >
             <p className="font-body text-gray-400 text-sm leading-relaxed">
-              {appState === "idle" && t('instructions.idle')}
+              {appState === "idle" && !isCameraReady && (language === 'zh' ? '正在初始化摄像头...' : 'Initializing camera...')}
+              {appState === "idle" && isCameraReady && t('instructions.idle')}
+              {appState === "countdown" && (language === 'zh' ? '准备好...即将开始录制！' : 'Get ready... recording starts soon!')}
               {appState === "recording" && t('instructions.recording')}
               {appState === "uploading" && t('instructions.uploading')}
               {appState === "analyzing" && t('instructions.analyzing')}

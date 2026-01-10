@@ -1,10 +1,12 @@
 import { motion } from "framer-motion";
 import { Play, Square, Upload } from "lucide-react";
 import { useRef } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface RecordingControlsProps {
   isRecording: boolean;
   isUploading: boolean;
+  isCameraReady: boolean;
   onStart: () => void;
   onStop: () => void;
   onFileSelect: (file: File) => void;
@@ -14,17 +16,21 @@ interface RecordingControlsProps {
 export default function RecordingControls({
   isRecording,
   isUploading,
+  isCameraReady,
   onStart,
   onStop,
   onFileSelect,
   countdown,
 }: RecordingControlsProps) {
+  const { language } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       onFileSelect(file);
+      // Reset input value so the same file can be selected again
+      event.target.value = '';
     }
   };
 
@@ -45,13 +51,13 @@ export default function RecordingControls({
       {/* Start Button */}
       <motion.button
         onClick={onStart}
-        disabled={isRecording || isUploading || countdown !== null}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        disabled={isRecording || isUploading || countdown !== null || !isCameraReady}
+        whileHover={isCameraReady ? { scale: 1.05 } : {}}
+        whileTap={isCameraReady ? { scale: 0.95 } : {}}
         className={`
           relative w-24 h-24 rounded-2xl font-display font-bold text-sm uppercase tracking-wider
-          transition-all duration-300 
-          ${isRecording || isUploading || countdown !== null
+          transition-all duration-300
+          ${isRecording || isUploading || countdown !== null || !isCameraReady
             ? "bg-magic-charcoal/50 text-gray-600 cursor-not-allowed border-2 border-gray-700"
             : "bg-gradient-to-b from-magic-charcoal to-black text-magic-gold border-2 border-magic-gold/50 shadow-[0_4px_20px_rgba(212,175,55,0.2),inset_0_1px_0_rgba(255,255,255,0.1)] hover:shadow-[0_4px_30px_rgba(212,175,55,0.4),inset_0_1px_0_rgba(255,255,255,0.1)] hover:border-magic-gold/80"
           }
@@ -62,15 +68,28 @@ export default function RecordingControls({
           <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/30 to-transparent" />
         </div>
-        
+
         {/* Icon */}
         <div className="relative flex flex-col items-center justify-center h-full">
-          <Play className={`w-8 h-8 mb-1 ${isRecording || isUploading || countdown !== null ? "text-gray-600" : "text-magic-gold"}`} />
-          <span className="text-xs">Start</span>
+          {!isCameraReady ? (
+            <>
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                className="w-8 h-8 mb-1 border-2 border-gray-600 border-t-magic-gold rounded-full"
+              />
+              <span className="text-xs">{language === 'zh' ? '准备中' : 'Loading'}</span>
+            </>
+          ) : (
+            <>
+              <Play className={`w-8 h-8 mb-1 ${isRecording || isUploading || countdown !== null ? "text-gray-600" : "text-magic-gold"}`} />
+              <span className="text-xs">{language === 'zh' ? '录制' : 'Start'}</span>
+            </>
+          )}
         </div>
-        
+
         {/* Glow effect when enabled */}
-        {!isRecording && !isUploading && countdown === null && (
+        {!isRecording && !isUploading && countdown === null && isCameraReady && (
           <motion.div
             animate={{ opacity: [0.3, 0.6, 0.3] }}
             transition={{ duration: 2, repeat: Infinity }}
@@ -103,7 +122,7 @@ export default function RecordingControls({
         {/* Icon */}
         <div className="relative flex flex-col items-center justify-center h-full">
           <Square className={`w-7 h-7 mb-1 ${!isRecording || isUploading ? "text-gray-600" : "text-white"}`} fill="currentColor" />
-          <span className="text-xs">Stop</span>
+          <span className="text-xs">{language === 'zh' ? '停止' : 'Stop'}</span>
         </div>
 
         {/* Recording pulse effect */}
@@ -140,7 +159,7 @@ export default function RecordingControls({
         {/* Icon */}
         <div className="relative flex flex-col items-center justify-center h-full">
           <Upload className={`w-8 h-8 mb-1 ${isRecording || isUploading || countdown !== null ? "text-gray-600" : "text-purple-300"}`} />
-          <span className="text-xs">Upload</span>
+          <span className="text-xs">{language === 'zh' ? '上传' : 'Upload'}</span>
         </div>
 
         {/* Glow effect when enabled */}

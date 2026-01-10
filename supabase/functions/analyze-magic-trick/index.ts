@@ -29,21 +29,21 @@ async function analyzeWithGemini(videoFile: File, language: string = 'en'): Prom
   const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
 
   if (!geminiApiKey) {
-    console.warn('GEMINI_API_KEY not set, falling back to random analysis');
-    return fallbackAnalysis(language);
+    throw new Error(language === 'zh'
+      ? 'AI 服务未配置，请联系管理员设置 GEMINI_API_KEY'
+      : 'AI service not configured. Please contact administrator to set up GEMINI_API_KEY');
   }
 
-  try {
-    console.log('Converting video to base64 for Gemini...');
-    const videoBase64 = await videoToBase64(videoFile);
-    const videoSizeKB = (videoBase64.length * 3 / 4) / 1024;
-    console.log(`Video size: ${videoSizeKB.toFixed(2)} KB`);
+  console.log('Converting video to base64 for Gemini...');
+  const videoBase64 = await videoToBase64(videoFile);
+  const videoSizeKB = (videoBase64.length * 3 / 4) / 1024;
+  console.log(`Video size: ${videoSizeKB.toFixed(2)} KB`);
 
-    // Gemini API endpoint with video support - Updated to Gemini 3.0
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${geminiApiKey}`;
+  // Gemini API endpoint with video support - Use gemini-2.0-flash-exp for best video analysis
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`;
 
-    // Bilingual prompt - Let AI analyze and determine verdict naturally
-    const promptText = language === 'zh'
+  // Bilingual prompt - Let AI analyze and determine verdict naturally
+  const promptText = language === 'zh'
       ? `你是一位专业的魔术分析师和表演艺术专家，拥有多年分析近景魔术的经验。请仔细观看这段魔术表演视频并进行深入分析。
 
 请完整观看视频，注意以下方面：
@@ -137,129 +137,61 @@ Important:
 
 Now please begin analyzing this magic trick video:`;
 
-    console.log('Calling Gemini API with video...');
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            {
-              text: promptText
-            },
-            {
-              inline_data: {
-                mime_type: videoFile.type,
-                data: videoBase64
-              }
-            }
-          ]
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini API error response:', errorText);
-      throw new Error(`Gemini API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('Gemini API response received');
-
-    // Extract text from Gemini response
-    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    console.log('Gemini response:', resultText);
-
-    // Parse JSON from Gemini's response
-    const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        verdict: parsed.verdict,
-        confidence: parsed.confidence || 0.75,
-        timestamps: parsed.timestamps || [],
-        analysis: parsed.analysis
-      };
-    }
-
-    console.warn('Could not parse JSON from Gemini response, using fallback');
-    return fallbackAnalysis(language);
-  } catch (error) {
-    console.error('Gemini API error:', error);
-    return fallbackAnalysis(language);
-  }
-}
-
-function fallbackAnalysis(language: string = 'en'): AnalysisResult {
-  // Fallback to simulated analysis if Gemini API fails
-  // Note: This is only used when API key is not configured
-  const isCaught = Math.random() > 0.5; // 50/50 chance
-  const confidence = isCaught
-    ? 0.65 + Math.random() * 0.2  // 0.65-0.85 for caught
-    : 0.55 + Math.random() * 0.25; // 0.55-0.80 for fooled
-
-  const messages = {
-    zh: {
-      caught: `观察与分析：在观看这段魔术表演时，我注意到了几个关键时刻的细节。表演整体呈现流畅，但在某些特定时间点，手部动作出现了微妙的不自然感。我观察到了快速的手部移动和短暂的停顿，这些可能是在掩盖某些操作。
-
-具体发现：从视频中可以看到，在标注的时间戳位置，表演者的手部姿势和移动轨迹显示出可疑的特征。虽然整体技巧展现不错，但这些细节暴露了可能的手法操作。摄像角度在某些时刻也为观察提供了额外的线索。
-
-表演评价：从技术角度来看，表演者展现了一定的基础功底，时机控制总体合理。然而，在手法的隐蔽性和自然度方面还有提升空间。建议加强基本功练习，特别是在关键动作的流畅性和伪装方面。
-
-改进建议：建议重新审视摄像机角度的选择，某些角度可能无意中暴露了操作细节。同时，可以加强误导技巧的运用，通过眼神、语言或其他辅助动作来更好地控制观众注意力。多从观众视角反复审视表演，找出可能的破绽并加以改进。`,
-      fooled: `观察与分析：在仔细观看这段魔术表演后，我发现整个过程展现出了相当高的专业水准。从头到尾，我无法确定具体使用了什么手法或技巧来完成这个效果。所有的动作都显得自然流畅，没有明显的破绽。
-
-技术评估：我特别关注了手部动作、身体角度和时机控制等关键要素。表演者的每个动作都经过精心设计和熟练执行，没有可疑的停顿或不自然的姿势。道具的处理方式专业，摄像角度选择得当，成功地维持了魔术的神秘感。
-
-表演亮点：这个表演最突出的优点是整体的流畅性和自然度。时机把握恰到好处，如果使用了误导技巧，也运用得非常巧妙。观众的注意力被很好地引导，关键操作（如果有的话）被完美地隐藏了起来。
-
-专业建议：虽然这次表演已经相当出色，但仍可以考虑在表演中加入更多的互动元素或故事性，进一步提升观赏体验。继续保持这种高水平的技巧和表演质量，同时可以尝试开发更复杂的魔术组合，挑战更高难度的表演。你的表演已经展现出了专业魔术师的潜质。`
+  console.log('Calling Gemini API with video...');
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
     },
-    en: {
-      caught: `Observation & Analysis: While watching this magic performance, I noticed several key moments that caught my attention. The performance flows smoothly overall, but at certain specific timepoints, the hand movements showed subtle unnaturalness. I observed rapid hand movements and brief pauses that may be concealing certain operations.
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          {
+            text: promptText
+          },
+          {
+            inline_data: {
+              mime_type: videoFile.type,
+              data: videoBase64
+            }
+          }
+        ]
+      }]
+    })
+  });
 
-Specific Findings: From the video, at the marked timestamps, the performer's hand positioning and movement trajectory show suspicious characteristics. While the overall technique is decent, these details expose possible sleight of hand operations. The camera angle at certain moments also provided additional clues for observation.
-
-Performance Evaluation: From a technical perspective, the performer demonstrates a solid foundation with generally reasonable timing control. However, there is room for improvement in the concealment and naturalness of the techniques. I recommend strengthening basic practice, especially in the fluidity and disguise of critical movements.
-
-Improvement Suggestions: Consider revisiting the camera angle selection, as certain angles may have inadvertently exposed operational details. Additionally, strengthen the use of misdirection techniques through eye contact, speech, or other auxiliary actions to better control audience attention. Repeatedly review the performance from the audience's perspective to identify and improve potential flaws.`,
-      fooled: `Observation & Analysis: After carefully watching this magic performance, I found that the entire process demonstrates a considerably high level of professionalism. From start to finish, I was unable to determine what specific techniques or methods were used to achieve this effect. All movements appeared natural and fluid, with no obvious flaws.
-
-Technical Assessment: I paid particular attention to key elements such as hand movements, body angles, and timing control. Each of the performer's actions was carefully designed and skillfully executed, with no suspicious pauses or unnatural positions. Prop handling was professional, camera angle selection was appropriate, successfully maintaining the mystery of the magic.
-
-Performance Highlights: The most outstanding aspect of this performance is its overall fluidity and naturalness. Timing is impeccable, and if misdirection techniques were used, they were employed very cleverly. Audience attention was well-directed, and critical operations (if any) were perfectly concealed.
-
-Professional Recommendations: While this performance is already quite excellent, you could consider adding more interactive elements or storytelling to further enhance the viewing experience. Continue maintaining this high level of technique and performance quality, while exploring more complex magic combinations and challenging higher difficulty performances. Your performance already shows the potential of a professional magician.`
-    }
-  };
-
-  const lang = language === 'zh' ? 'zh' : 'en';
-
-  return {
-    verdict: isCaught ? 'caught' : 'fooled',
-    confidence: parseFloat(confidence.toFixed(2)),
-    timestamps: isCaught ? generateRandomTimestamps() : [],
-    analysis: isCaught ? messages[lang].caught : messages[lang].fooled
-  };
-}
-
-function generateRandomTimestamps(): string[] {
-  const count = 1 + Math.floor(Math.random() * 3);
-  const timestamps: string[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const seconds = Math.floor(Math.random() * 10) + 1;
-    const ms = Math.floor(Math.random() * 100);
-    timestamps.push(`0:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Gemini API error response:', errorText);
+    throw new Error(`Gemini API error: ${response.statusText}`);
   }
 
-  return timestamps.sort();
+  const data = await response.json();
+  console.log('Gemini API response received');
+
+  // Extract text from Gemini response
+  const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  console.log('Gemini response:', resultText);
+
+  // Parse JSON from Gemini's response
+  const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      verdict: parsed.verdict,
+      confidence: parsed.confidence || 0.75,
+      timestamps: parsed.timestamps || [],
+      analysis: parsed.analysis
+    };
+  }
+
+  // If we can't parse the response, throw an error with the raw response for debugging
+  throw new Error(language === 'zh'
+    ? `AI 分析响应格式错误。原始响应：${resultText.substring(0, 200)}`
+    : `AI analysis response format error. Raw response: ${resultText.substring(0, 200)}`);
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders, status: 200 });
@@ -293,12 +225,13 @@ Deno.serve(async (req) => {
       }
     );
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Analysis error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
       JSON.stringify({
         error: 'Failed to analyze video',
-        details: error.message
+        details: errorMessage
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );

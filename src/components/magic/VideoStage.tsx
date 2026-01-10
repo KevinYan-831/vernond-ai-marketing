@@ -5,20 +5,28 @@ interface VideoStageProps {
   isRecording: boolean;
   videoBlob: Blob | null;
   onStreamReady: (stream: MediaStream) => void;
+  shouldReinitialize?: boolean;
 }
 
-export default function VideoStage({ isRecording, videoBlob, onStreamReady }: VideoStageProps) {
+export default function VideoStage({ isRecording, videoBlob, onStreamReady, shouldReinitialize }: VideoStageProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const frozenVideoRef = useRef<HTMLVideoElement>(null);
   const [hasCamera, setHasCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const streamInitialized = useRef(false);
+  const currentStreamRef = useRef<MediaStream | null>(null);
 
-  const initCamera = useCallback(async () => {
-    if (streamInitialized.current) return;
+  const initCamera = useCallback(async (forceReinit = false) => {
+    if (streamInitialized.current && !forceReinit) return;
 
     setCameraError(null);
     setHasCamera(false);
+
+    // Stop any existing stream first
+    if (currentStreamRef.current) {
+      currentStreamRef.current.getTracks().forEach(track => track.stop());
+      currentStreamRef.current = null;
+    }
 
     try {
       console.log("Requesting camera access...");
@@ -28,6 +36,7 @@ export default function VideoStage({ isRecording, videoBlob, onStreamReady }: Vi
       });
 
       console.log("Camera access granted, stream received:", stream);
+      currentStreamRef.current = stream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -63,23 +72,37 @@ export default function VideoStage({ isRecording, videoBlob, onStreamReady }: Vi
     }
   }, [onStreamReady]);
 
+  // Initial camera setup
   useEffect(() => {
     initCamera();
 
     return () => {
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        streamInitialized.current = false;
+      if (currentStreamRef.current) {
+        currentStreamRef.current.getTracks().forEach(track => track.stop());
+        currentStreamRef.current = null;
       }
+      streamInitialized.current = false;
     };
-  }, [initCamera]);
+  }, []);
+
+  // Handle camera reset for retry functionality
+  useEffect(() => {
+    if (shouldReinitialize && !videoBlob) {
+      console.log("Reinitializing camera for retry...");
+      streamInitialized.current = false;
+      initCamera(true);
+    }
+  }, [shouldReinitialize, videoBlob, initCamera]);
 
   useEffect(() => {
     if (videoBlob && frozenVideoRef.current) {
       const url = URL.createObjectURL(videoBlob);
       frozenVideoRef.current.src = url;
       frozenVideoRef.current.load();
+      // Auto-play the recorded video on loop for preview
+      frozenVideoRef.current.play().catch(() => {
+        // Autoplay may be blocked, that's okay
+      });
       return () => URL.revokeObjectURL(url);
     }
   }, [videoBlob]);
@@ -149,6 +172,7 @@ export default function VideoStage({ isRecording, videoBlob, onStreamReady }: Vi
                   style={{ transform: 'scaleX(-1)' }}
                   muted
                   playsInline
+                  loop
                 />
               )}
             </AnimatePresence>

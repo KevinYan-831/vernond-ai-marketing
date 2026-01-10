@@ -46,6 +46,7 @@ const translations = {
     'verdict.analysis': 'Analysis:',
     'verdict.tryagain': 'Try Again',
     'verdict.share': 'Share Result',
+    'verdict.badge': 'MASTER ILLUSIONIST',
 
     // WeChat CTA
     'wechat.title': 'Join Our Beta Community',
@@ -91,6 +92,7 @@ const translations = {
     'verdict.analysis': '分析结果：',
     'verdict.tryagain': '再试一次',
     'verdict.share': '分享结果',
+    'verdict.badge': '魔术大师',
 
     // WeChat CTA
     'wechat.title': '加入内测社群',
